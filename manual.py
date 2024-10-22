@@ -1,7 +1,7 @@
 from sspmpu_elections import determine_winners, compute_elections, Elections
 
 
-elections = Elections("examples/candidates.csv", "examples/ballots.csv", complete=False, years=[1, 5], common=3)
+elections = Elections("candidates.csv", "ballots.csv", complete=False, years=[1, 5], common=3)
 #print(elections.pairwise_matrices_by_years)
 #print(elections.candidates[elections.candidates.iloc[:, 0]=='Богданова'].index.to_list()[0])
 #print(elections.ballots.columns.to_list())
