@@ -7,12 +7,7 @@ elections = Elections("candidates.csv", "ballots.csv", complete=False, years=[1,
 #print(elections.ballots.columns.to_list())
 #print(elections.ballots_matrix)
 
-'''
-pairwise_matrix = np.array([[0, 5, 5, 3],
-                            [4, 0, 7, 5],
-                            [4, 2, 0, 5],
-                            [6, 4, 4, 0]])
-'''
+
 elections_ex_13 = Elections("examples/candidates_ex13.csv", "examples/ballots_ex13.csv", complete=False, years=[1], common=2)
 elections_ex_6 = Elections("examples/candidates_ex6.csv", "examples/ballots_ex6.csv", complete=False, years=[1], common=2)
 elections_ex_4 = Elections("examples/candidates_ex4.csv", "examples/ballots_ex4.csv", complete=False, years=[1], common=2)
@@ -43,8 +38,9 @@ print(f'ПОБЕДИТЕЛИ В ПРИМЕРЕ №11 (НИЧЬЯ С ЗАПРЕТ
 print(f'ПОБЕДИТЕЛИ В ПРИМЕРЕ №12 (НИЧЬЯ С ЗАПРЕТОМ ЗВЕНЬЕВ): {determine_winners(elections_ex_12.ballots_matrix, elections_ex_12.pairwise_matrix, 2)}\n')
 #print(basic_schulze(elections))
 print(compute_elections(elections))
-print(compute_elections(elections_ex_12))
 
+#elections_2024 = Elections("candidates_2024.csv", "ballots_2024.csv", complete=True)
+#print(compute_elections(elections_2024, report_file='results_2024.txt'))
 
 
 

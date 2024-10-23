@@ -48,9 +48,9 @@ def get_links_order(pairwise_matrix, compare_method='wins'):
     squared_num = num_of_candidates**2
     links_order = pd.DataFrame(np.zeros((squared_num, squared_num)), \
     index=itertools.product(list_of_candidates, list_of_candidates), columns=itertools.product(list_of_candidates, list_of_candidates)).map(np.int64)
-    for link_id in range(squared_num):
+    for link_id in np.arange(squared_num):
         a, b = links_order.index[link_id]
-        for other_link_id in range(squared_num):
+        for other_link_id in np.arange(squared_num):
             c, d = links_order.columns[other_link_id]
             if methods[compare_method](pairwise_matrix, a, b, c, d):
             #if eval("compare_" + compare_method + "(pairwise_matrix, a, b, c, d)"):
@@ -69,13 +69,13 @@ def get_paths_matrix_by_links_order(links_order, list_of_candidates):
     0, если звенья равны по силе;
     -1, если (c, d) - более сильное звено, чем (a, b).
     list_of_candidates - список фамилий (имён, индексов) кандидатов, list.
-    Возвращает матрицу путей, Pandas DataFrame.
+    Возвращает матрицу сильнейших путей, Pandas DataFrame.
     На пересечении строки с индексом a и столбца с индексом b содержится 
     идентификатор звена, которое является критическим для сильнейшего из всех путей
     между кандидатами a и b.
     """ 
     num_of_candidates = len(list_of_candidates)
-    paths_matrix = pd.DataFrame([[(0, 0) for i in range(num_of_candidates)] for j in range(num_of_candidates)], index=list_of_candidates, columns=list_of_candidates)
+    paths_matrix = pd.DataFrame([[(0, 0) for i in np.arange(num_of_candidates)] for j in np.arange(num_of_candidates)], index=list_of_candidates, columns=list_of_candidates)
     for candidate_id in np.arange(num_of_candidates):
         for opponent_id in np.arange(num_of_candidates):
             paths_matrix.iat[candidate_id, opponent_id] = (list_of_candidates[candidate_id], list_of_candidates[opponent_id])
@@ -90,6 +90,44 @@ def get_paths_matrix_by_links_order(links_order, list_of_candidates):
                     if links_order.at[(paths_matrix.iat[j, k]), (min_of_two)] == -1:
                         paths_matrix.iat[j,k] = min_of_two
     return paths_matrix
+
+
+def get_numeric_paths_matrix(pairwise_matrix, paths_matrix):
+    """
+    Представление матрицы сильнейших путей с отображением силы каждого пути.
+    Применимо только к сценариям, где не требуется разрешать ничейную ситуацию,
+    т.к. после разрешения ничейной ситуации силу сильнейшего пути уже нельзя 
+    представить в виде числа, можно только в виде сигнатуры критического звена.
+    Аргументы:
+    pairwise_matrix - матрица попарных предпочтений, или матрица Кондорсе, Pandas DataFrame.
+    paths_matrix - матрица сильнейших путей, в каждой ячейке которой содержится
+    сигнатура критического звена, Pandas DataFrame.
+    Возвращает матрицу сильнейших путей с отображением силы путей, Pandas DataFrame.
+    """
+
+    numeric_paths_matrix = paths_matrix.copy()
+    list_of_candidates = pairwise_matrix.index.to_list()
+    num_of_candidates = len(list_of_candidates)
+    for candidate_id in np.arange(num_of_candidates):
+        for opponent_id in np.arange(num_of_candidates):
+            numeric_paths_matrix.iat[candidate_id, opponent_id] = pairwise_matrix.at[paths_matrix.iat[candidate_id, opponent_id][0], paths_matrix.iat[candidate_id, opponent_id][1]]
+    return numeric_paths_matrix
+
+
+def numeric_binary_relation(numeric_paths_matrix, binary_relation):
+    """
+    Приводит бинарное отношение в более информативный вид: каждая пара представляется
+    в виде строки, содержащей "счёт" противостояния, т.е. силу сильнейшего пути от первого кандидата
+    в паре ко второму и, наоборот, от второго к первому.
+    Применимо только к сценариям, где не требуется разрешать ничейную ситуацию,
+    т.к. после разрешения ничейной ситуации силу сильнейшего пути уже нельзя 
+    представить в виде числа, можно только в виде сигнатуры критического звена.
+    Аргументы:
+    numeric_paths_matrix - матрица сильнейших путей с отображением силы путей, Pandas DataFrame.
+    binary_relation - множество пар, принадлежащих бинарному отношению, ыуе.
+    """
+    binary_relation = sorted(list(binary_relation), key=lambda x: (x[0], x[1]))
+    return list(map(lambda x, pm=numeric_paths_matrix: x[0] + f'    {pm.at[x[0], x[1]]}:{pm.at[x[1], x[0]]}    ' + x[1], binary_relation))      
 
 
 def get_binary_relation(links_order, paths_matrix):
@@ -175,9 +213,9 @@ def get_winners_from_relation(binary_relation, list_of_candidates, winners_to_de
         full_order[i + 1 + num_of_candidates - len(linear_order_from_end)] = loser
     #print(full_order)
     if ordered >= winners_to_determine:
-        result = [full_order[i + 1] for i in range(winners_to_determine)]
+        result = [full_order[i + 1] for i in np.arange(winners_to_determine)]
     elif num_of_candidates - ordered_from_end <= winners_to_determine:
-        result = list(set(list_of_candidates) - {full_order[num_of_candidates - i] for i in range(num_of_candidates - winners_to_determine)})
+        result = list(set(list_of_candidates) - {full_order[num_of_candidates - i] for i in np.arange(num_of_candidates - winners_to_determine)})
     else:
         result = []
     return result, full_order, unpicked_candidates
