@@ -28,36 +28,66 @@ def compare_losses(pairwise_matrix, a, b, c, d):
 methods = {'wins': compare_wins, 'losses': compare_losses, 'margins': compare_margins, 'ratios': compare_ratios}
 
 
+LINK_METHODS = ('wins', 'losses', 'margins', 'ratios')
+
+
+def _strength_matrix(N, compare_method):
+    """Скалярная сила звена (a->b) как C x C матрица для выбранной меры."""
+    N = N.astype(np.float64)
+    if compare_method == 'wins':
+        M = N.copy()
+    elif compare_method == 'losses':
+        M = -N.T
+    elif compare_method == 'margins':
+        M = N - N.T
+    elif compare_method == 'ratios':
+        with np.errstate(divide='ignore', invalid='ignore'):
+            M = np.where(N.T > 0, N / np.where(N.T == 0, 1.0, N.T),
+                         np.where(N > 0, np.inf, 0.0))
+    else:
+        raise ValueError("Invalid method name!")
+    return M
+
+
+def strongest_paths(strength):
+    """Сильнейшие пути Шульце (Флойд-Уоршелл max-min), векторизовано. Быстрый базовый путь."""
+    C = strength.shape[0]
+    P = strength.astype(np.float64).copy()
+    np.fill_diagonal(P, -np.inf)
+    for i in range(C):
+        P = np.maximum(P, np.minimum(P[:, i:i + 1], P[i:i + 1, :]))
+        np.fill_diagonal(P, -np.inf)
+    return P
+
+
+def base_relation(N, names, compare_method='wins'):
+    """Базовое бинарное отношение Шульце и матрица сил путей — без матрицы C^2 x C^2.
+    На профилях с единственным результатом совпадает с прежней реализацией, но O(C^3)."""
+    P = strongest_paths(_strength_matrix(N, compare_method))
+    rel = set()
+    C = len(names)
+    for a in range(C):
+        for b in range(C):
+            if a != b and P[a, b] > P[b, a]:
+                rel.add((names[a], names[b]))
+    return rel, P
+
+
 def get_links_order(pairwise_matrix, compare_method='wins'):
     """
-    Аргументы:
-    pairwise_matrix - матрица попарных предпочтений, или матрица Кондорсе, Pandas DataFrame.
-    compare_method - "wins", "losses", "margins", "ratios" - способ сравнения силы звеньев. 
-    Если все голосующие обязаны ранжировать всех кандидатов по-разному, то четыре способа
-    дают идентичный результат. 
-    Возвращает матрицу попарного сравнения звеньев между всеми кандидатами, Pandas DataFrame.
-    На пересечении строки с индексом (a, b) и столбца с индексом (c, d) стоит:
-    1, если (a, b) - более сильное звено, чем (c, d);
-    0, если звенья равны по силе;
-    -1, если (c, d) - более сильное звено, чем (a, b).
+    Матрица попарного сравнения силы звеньев (та же семантика, что и раньше),
+    но построенная векторизованно: было O(C^4) с поэлементным доступом pandas,
+    стало одно матричное вычитание. Значения: 1 / 0 / -1.
     """
-    if compare_method not in ("wins", "losses", "margins", "ratios"):
-        raise ValueError("Invalid method name!") 
+    if compare_method not in LINK_METHODS:
+        raise ValueError("Invalid method name!")
     list_of_candidates = pairwise_matrix.index.to_list()
-    num_of_candidates = len(list_of_candidates)   
-    squared_num = num_of_candidates**2
-    links_order = pd.DataFrame(np.zeros((squared_num, squared_num)), \
-    index=itertools.product(list_of_candidates, list_of_candidates), columns=itertools.product(list_of_candidates, list_of_candidates)).map(np.int64)
-    for link_id in np.arange(squared_num):
-        a, b = links_order.index[link_id]
-        for other_link_id in np.arange(squared_num):
-            c, d = links_order.columns[other_link_id]
-            if methods[compare_method](pairwise_matrix, a, b, c, d):
-            #if eval("compare_" + compare_method + "(pairwise_matrix, a, b, c, d)"):
-            #if pairwise_matrix.loc[a, b] > pairwise_matrix.loc[c, d]:
-                links_order.iloc[link_id, other_link_id] = 1
-                links_order.iloc[other_link_id, link_id] = -1
-    return links_order
+    M = _strength_matrix(pairwise_matrix.to_numpy(), compare_method)
+    s = M.ravel()                                  # порядок совпадает с itertools.product(cands, cands)
+    lo = np.sign(np.subtract.outer(s, s))
+    lo[np.isnan(lo)] = 0
+    idx = list(itertools.product(list_of_candidates, list_of_candidates))
+    return pd.DataFrame(lo.astype(np.int64), index=idx, columns=idx)
 
 
 def get_paths_matrix_by_links_order(links_order, list_of_candidates):
@@ -124,7 +154,7 @@ def numeric_binary_relation(numeric_paths_matrix, binary_relation):
     представить в виде числа, можно только в виде сигнатуры критического звена.
     Аргументы:
     numeric_paths_matrix - матрица сильнейших путей с отображением силы путей, Pandas DataFrame.
-    binary_relation - множество пар, принадлежащих бинарному отношению, ыуе.
+    binary_relation - множество пар, принадлежащих бинарному отношению, set.
     """
     binary_relation = sorted(list(binary_relation), key=lambda x: (x[0], x[1]))
     return list(map(lambda x, pm=numeric_paths_matrix: x[0] + f'    {pm.at[x[0], x[1]]}:{pm.at[x[1], x[0]]}    ' + x[1], binary_relation))      
@@ -219,3 +249,18 @@ def get_winners_from_relation(binary_relation, list_of_candidates, winners_to_de
     else:
         result = []
     return result, full_order, unpicked_candidates
+
+def candidate_hierarchy_sort(cand_names, ballots_ranks, name_to_col, order):
+    """
+    Детерминированный тай-брейк крайнего средства: строгий порядок кандидатов по
+    «иерархии бюллетеней». Бюллетени берутся в зафиксированном порядке `order`
+    (перестановка, полученная из seed); первый бюллетень важнее второго и т.д.
+    Меньший ранг = лучше. Возвращает список от лучшего к худшему; остаточные
+    совпадения разрешаются по имени (тоже детерминированно).
+    """
+    R = ballots_ranks[order]
+
+    def key(name):
+        col = name_to_col[name]
+        return tuple(float(x) for x in R[:, col]) + (str(name),)
+    return sorted(cand_names, key=key)
